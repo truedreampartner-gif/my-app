@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# 지울 파일을 임시로 옮겨 두는 폴더 (커밋하지 않음)
+/trash-can/
