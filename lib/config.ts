@@ -29,8 +29,10 @@ export const MAX_SOURCES = 3;
  * 가장 가까운 조각도 이 값보다 낮으면 AI를 부르지 않고 "찾을 수 없습니다"로 답한다.
  * 임시값이다. PLAN 작업 18에서 테스트 질문 정답률과 모호한 질문("휴가?") 테스트가
  * 모두 통과하는 값으로 조정한다.
+ * 작업 9 측정(text-embedding-3-small): 테스트 질문의 최고 유사도 중 가장 낮은 값 0.288(오후 반차),
+ * 범위 밖 질문(날씨·점심·인사)의 최고 유사도 0.232 → 그 사이인 0.25로 둔다.
  */
-export const RELEVANCE_THRESHOLD = 0.3;
+export const RELEVANCE_THRESHOLD = 0.25;
 
 // ── OpenAI 모델 ───────────────────────────────────
 
