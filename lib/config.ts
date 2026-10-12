@@ -4,8 +4,7 @@
 
 // ── 문서 ──────────────────────────────────────────
 
-/** 챗봇이 읽는 문서 폴더 (my-app 기준) */
-export const DOCS_DIR = "docs";
+// 문서 폴더(docs/) 경로는 lib/documents.ts에 직접 적는다 (배포 용량 문제를 막기 위함, 그 파일의 주석 참고)
 
 /** 읽을 수 있는 파일 형식 */
 export const SUPPORTED_EXTENSIONS = [".txt", ".md", ".pdf"];

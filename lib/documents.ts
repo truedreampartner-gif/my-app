@@ -8,13 +8,7 @@ import path from "node:path";
 
 import { extractText, getDocumentProxy } from "unpdf";
 
-import {
-  CHUNK_OVERLAP,
-  CHUNK_SIZE,
-  DOCS_DIR,
-  MAX_DOCUMENTS,
-  SUPPORTED_EXTENSIONS,
-} from "@/lib/config";
+import { CHUNK_OVERLAP, CHUNK_SIZE, MAX_DOCUMENTS, SUPPORTED_EXTENSIONS } from "@/lib/config";
 import type { DocumentChunk } from "@/lib/types";
 
 /** 글자로 읽어 온 문서 하나 */
@@ -25,9 +19,18 @@ export type SourceDocument = {
   text: string;
 };
 
+// 주의: 문서 폴더 경로는 아래처럼 "docs"를 코드에 직접 적어야 한다.
+// 변수로 넘기면 Next.js가 어느 폴더를 읽는지 알 수 없어 프로젝트 전체를 배포 서버에 싣는다(build 경고).
+// 배포 때 docs/를 함께 싣는 설정은 next.config.ts의 outputFileTracingIncludes에 있다.
+
 /** docs/ 폴더의 절대 경로 */
 function getDocsPath(): string {
-  return path.join(process.cwd(), DOCS_DIR);
+  return path.join(process.cwd(), "docs");
+}
+
+/** docs/ 폴더 안 파일 하나의 절대 경로 */
+function getDocPath(docName: string): string {
+  return path.join(process.cwd(), "docs", docName);
 }
 
 /** 파일 확장자를 소문자로 돌려준다 (예: "규정.MD" → ".md") */
@@ -89,7 +92,7 @@ export async function loadDocuments(): Promise<SourceDocument[]> {
   const documents: SourceDocument[] = [];
   for (const docName of usedFileNames) {
     try {
-      const text = cleanText(await readDocumentFile(path.join(docsPath, docName)));
+      const text = cleanText(await readDocumentFile(getDocPath(docName)));
       if (text.length === 0) {
         console.warn(`[documents] 읽을 글자가 없어 건너뜁니다: ${docName}`);
         continue;
