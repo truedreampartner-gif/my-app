@@ -1,7 +1,7 @@
 // AI 지시문을 만들고 OpenAI에 물어 답변을 받는다. [서버 전용]
 // 설계 근거: DESIGN.md 2.1 4~5단계, 2.4 AI 지시문, PRD.md 5번 "AI가 지킬 규칙"
-// 범위: AI 답변 연결(PLAN 작업 13), 규칙 전체·응답 모양 지정·답변 검사(작업 14)
-// 이후 추가: 근거 확인(작업 15), 10초 제한(작업 16)
+// 범위: AI 답변 연결(PLAN 작업 13), 규칙 전체·응답 모양 지정·답변 검사(작업 14), 근거 확인(작업 15)
+// 이후 추가: 10초 제한(작업 16)
 import "server-only";
 
 import {
@@ -9,6 +9,7 @@ import {
   ANSWER_MODEL,
   MAX_ANSWER_CHARS,
   MAX_ANSWER_SENTENCES,
+  MAX_SOURCES,
 } from "@/lib/config";
 import { getOpenAIClient } from "@/lib/search";
 import type { AiAnswer, DocumentChunk } from "@/lib/types";
@@ -103,6 +104,25 @@ export async function generateAnswer(question: string, chunks: DocumentChunk[]):
   }
 
   return result;
+}
+
+/**
+ * AI가 참고했다고 한 조각 번호 중 실제로 준 번호(1~조각 수)만 남기고,
+ * 그 조각들의 문서 이름을 중복 없이 최대 MAX_SOURCES(3)개 돌려준다.
+ * AI가 지어낸 번호는 버리므로, 근거에는 실제로 준 문서 이름만 나온다. (DESIGN.md 2.1 5단계)
+ * 빈 목록이면 근거 없는 답이므로 보여 주지 않아야 한다.
+ */
+export function pickSources(result: AiAnswer, chunks: DocumentChunk[]): string[] {
+  const docNames = result.usedChunks
+    .filter((n) => n >= 1 && n <= chunks.length)
+    .map((n) => chunks[n - 1].docName);
+  const sources = [...new Set(docNames)].slice(0, MAX_SOURCES);
+
+  const ignored = result.usedChunks.filter((n) => n < 1 || n > chunks.length);
+  if (ignored.length > 0) {
+    console.warn(`[answer] 실제로 주지 않은 조각 번호를 버렸습니다: ${ignored.join(", ")}`);
+  }
+  return sources;
 }
 
 /** 모호한 질문이면 답변 끝에 안내 문구를 붙인다 (안내 문구는 300자 규칙에 포함하지 않는다) */

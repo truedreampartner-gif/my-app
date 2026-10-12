@@ -1,9 +1,10 @@
 // 서버 API: 질문을 받아 처리하고 답변을 돌려준다. (POST /api/chat)
 // 설계 근거: DESIGN.md 2.1 처리 과정, 2.3 주고받는 형식
-// 범위: 뼈대(PLAN 작업 10), AI 답변 연결(작업 13), AI 규칙·모호한 질문 안내(작업 14)
-// 이후 추가: 실제 참고한 근거만 표시(작업 15), 요청 전체 10초 제한(작업 16)
+// 범위: 뼈대(PLAN 작업 10), AI 답변 연결(작업 13), AI 규칙·모호한 질문 안내(작업 14),
+//       실제 참고한 근거만 표시(작업 15)
+// 이후 추가: 요청 전체 10초 제한(작업 16)
 
-import { generateAnswer, withAmbiguousSuffix } from "@/lib/answer";
+import { generateAnswer, pickSources, withAmbiguousSuffix } from "@/lib/answer";
 import {
   ERROR_MESSAGE,
   INVALID_QUESTION_MESSAGE,
@@ -52,9 +53,13 @@ export async function POST(request: Request): Promise<Response> {
       return reply({ status: "not_found", answer: NOT_FOUND_MESSAGE, sources: [] });
     }
 
-    // 근거: 지금은 AI에게 준 조각의 문서 이름을 중복 없이 모두 표시한다
-    // (작업 15에서 AI가 실제로 참고한 조각의 문서만 남기도록 바꾼다)
-    const sources = [...new Set(chunks.map((chunk) => chunk.docName))];
+    // 근거: AI가 실제로 참고한 조각의 문서 이름만 남긴다. 하나도 안 남으면 근거 없는 답이라 보여 주지 않는다
+    const sources = pickSources(result, chunks);
+    if (sources.length === 0) {
+      console.warn(`[api/chat] 근거로 확인된 문서가 없어 답변을 보여 주지 않습니다 / 질문: ${question}`);
+      return reply({ status: "not_found", answer: NOT_FOUND_MESSAGE, sources: [] });
+    }
+
     return reply({ status: "answered", answer: withAmbiguousSuffix(result), sources });
   } catch (error) {
     // 오류 내용은 서버 로그에만 남기고 화면에는 숨긴다
