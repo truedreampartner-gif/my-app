@@ -1,6 +1,6 @@
 // OpenAI 연결과 뜻 좌표(임베딩) 계산을 맡는다. [서버 전용]
 // 설계 근거: DESIGN.md 2.2 문서 준비 과정, 3.2 추가 기술, 4장 API 키 규칙
-// 범위: OpenAI 연결 확인(PLAN 작업 8), 관련 조각 찾기(작업 9)
+// 범위: OpenAI 연결 확인(PLAN 작업 8), 관련 조각 찾기(작업 9), 10초 제한 연동(작업 16)
 import "server-only";
 
 import OpenAI from "openai";
@@ -27,14 +27,17 @@ export function getOpenAIClient(): OpenAI {
   return client;
 }
 
-/** 글 여러 개의 뜻 좌표(임베딩)를 한 번에 계산한다. 결과 순서는 입력 순서와 같다. */
-export async function embedTexts(texts: string[]): Promise<number[][]> {
+/**
+ * 글 여러 개의 뜻 좌표(임베딩)를 한 번에 계산한다. 결과 순서는 입력 순서와 같다.
+ * signal이 중단되면(10초 초과) OpenAI 호출도 함께 멈춘다.
+ */
+export async function embedTexts(texts: string[], signal?: AbortSignal): Promise<number[][]> {
   if (texts.length === 0) return [];
 
-  const response = await getOpenAIClient().embeddings.create({
-    model: EMBEDDING_MODEL,
-    input: texts,
-  });
+  const response = await getOpenAIClient().embeddings.create(
+    { model: EMBEDDING_MODEL, input: texts },
+    { signal },
+  );
 
   return response.data
     .sort((a, b) => a.index - b.index)
@@ -63,6 +66,8 @@ async function buildIndex(): Promise<IndexedChunk[]> {
 /**
  * 보관해 둔 조각 목록을 돌려준다. 없으면 새로 만든다.
  * 동시에 질문이 여러 개 와도 한 번만 만들고, 만들다 실패하면 다음 질문 때 다시 시도한다.
+ * 여러 질문이 함께 쓰는 보관함이라 질문 하나의 10초 제한으로 중단하지 않는다.
+ * (첫 질문이 10초를 넘겨도 보관함은 계속 만들어져, 다음 질문부터 빨라진다)
  * 문서를 바꾸면 서버를 다시 켜야(배포 환경은 다시 배포해야) 반영된다.
  */
 function getIndex(): Promise<IndexedChunk[]> {
@@ -92,9 +97,16 @@ function cosineSimilarity(a: number[], b: number[]): number {
  * 질문과 뜻이 가까운 조각을 최대 MAX_SOURCES(3)개 고른다. 가까운 순서로 정렬된다.
  * 유사도가 RELEVANCE_THRESHOLD(기준점)보다 낮은 조각은 고르지 않는다.
  * 빈 목록이면 "문서에서 찾을 수 없습니다"로 답해야 한다는 뜻이다.
+ * signal이 중단되면(10초 초과) 질문의 뜻 좌표 계산을 멈춘다.
  */
-export async function findRelevantChunks(question: string): Promise<RelevantChunk[]> {
-  const [index, [questionEmbedding]] = await Promise.all([getIndex(), embedTexts([question])]);
+export async function findRelevantChunks(
+  question: string,
+  signal?: AbortSignal,
+): Promise<RelevantChunk[]> {
+  const [index, [questionEmbedding]] = await Promise.all([
+    getIndex(),
+    embedTexts([question], signal),
+  ]);
 
   return index
     .map(({ embedding, ...chunk }) => ({ ...chunk, score: cosineSimilarity(questionEmbedding, embedding) }))

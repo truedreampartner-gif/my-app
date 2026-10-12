@@ -1,7 +1,7 @@
 // AI 지시문을 만들고 OpenAI에 물어 답변을 받는다. [서버 전용]
 // 설계 근거: DESIGN.md 2.1 4~5단계, 2.4 AI 지시문, PRD.md 5번 "AI가 지킬 규칙"
-// 범위: AI 답변 연결(PLAN 작업 13), 규칙 전체·응답 모양 지정·답변 검사(작업 14), 근거 확인(작업 15)
-// 이후 추가: 10초 제한(작업 16)
+// 범위: AI 답변 연결(PLAN 작업 13), 규칙 전체·응답 모양 지정·답변 검사(작업 14), 근거 확인(작업 15),
+//       10초 제한 연동(작업 16)
 import "server-only";
 
 import {
@@ -81,18 +81,28 @@ function parseAiAnswer(raw: string): AiAnswer {
   };
 }
 
-/** 고른 조각과 질문을 OpenAI에 보내, 정해진 모양(AiAnswer)으로 답을 받는다 */
-export async function generateAnswer(question: string, chunks: DocumentChunk[]): Promise<AiAnswer> {
-  const response = await getOpenAIClient().responses.create({
-    model: ANSWER_MODEL,
-    instructions: INSTRUCTIONS,
-    input: `${formatChunks(chunks)}\n\n[질문]\n${question}`,
-    text: {
-      format: { type: "json_schema", name: "chat_answer", schema: ANSWER_SCHEMA, strict: true },
+/**
+ * 고른 조각과 질문을 OpenAI에 보내, 정해진 모양(AiAnswer)으로 답을 받는다.
+ * signal이 중단되면(10초 초과) OpenAI 호출도 함께 멈춘다.
+ */
+export async function generateAnswer(
+  question: string,
+  chunks: DocumentChunk[],
+  signal?: AbortSignal,
+): Promise<AiAnswer> {
+  const response = await getOpenAIClient().responses.create(
+    {
+      model: ANSWER_MODEL,
+      instructions: INSTRUCTIONS,
+      input: `${formatChunks(chunks)}\n\n[질문]\n${question}`,
+      text: {
+        format: { type: "json_schema", name: "chat_answer", schema: ANSWER_SCHEMA, strict: true },
+      },
+      // 10초 안에 답해야 하므로 깊게 생각하는 단계를 최소로 줄인다
+      reasoning: { effort: "low" },
     },
-    // 10초 안에 답해야 하므로 깊게 생각하는 단계를 최소로 줄인다
-    reasoning: { effort: "low" },
-  });
+    { signal },
+  );
 
   const result = parseAiAnswer(response.output_text);
 

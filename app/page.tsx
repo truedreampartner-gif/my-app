@@ -3,12 +3,16 @@
 // 챗봇 화면 (주소: /)
 // 설계 근거: DESIGN.md 1장 화면 구성 — ① 머리글, ③ 대화 목록, ⑤ 입력 영역
 // 범위: 화면 뼈대(PLAN 작업 11), 서버 API 연결(작업 12) — 질문을 /api/chat으로 보내고 답변과 근거 문서 이름을 보여 준다.
+//       서버 무응답 대비 대기 한도(작업 16)
 // 이후 추가: 개인정보 안내(작업 17), 추천 질문(작업 19), 👍/👎(작업 20)
 // 화면 코드는 서버 전용 파일(lib/search.ts, lib/answer.ts, lib/documents.ts)을 불러오지 않는다.
 
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
 
-import { ERROR_MESSAGE, MAX_QUESTION_LENGTH } from "@/lib/config";
+import { ERROR_MESSAGE, MAX_QUESTION_LENGTH, REQUEST_TIMEOUT_MS } from "@/lib/config";
+
+/** 서버가 아예 응답하지 않을 때를 대비한 화면 쪽 대기 한도 (서버의 10초 제한 + 여유 5초) */
+const CLIENT_TIMEOUT_MS = REQUEST_TIMEOUT_MS + 5_000;
 import type { ChatRequest, ChatResponse } from "@/lib/types";
 
 /** 대화 목록의 말풍선 하나 */
@@ -21,7 +25,10 @@ type Message = {
   sources: string[];
 };
 
-/** 서버 API에 질문을 보내고 답변을 받는다. 연결이 끊기거나 응답을 읽지 못하면 오류 답변으로 바꾼다. */
+/**
+ * 서버 API에 질문을 보내고 답변을 받는다.
+ * 연결이 끊기거나, 응답을 읽지 못하거나, 서버가 너무 오래 응답하지 않으면 오류 답변으로 바꾼다.
+ */
 async function askServer(question: string): Promise<ChatResponse> {
   try {
     const body: ChatRequest = { question };
@@ -29,6 +36,7 @@ async function askServer(question: string): Promise<ChatResponse> {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(CLIENT_TIMEOUT_MS),
     });
     // 400 응답도 같은 모양(ChatResponse)으로 오므로 그대로 읽는다
     return (await response.json()) as ChatResponse;
