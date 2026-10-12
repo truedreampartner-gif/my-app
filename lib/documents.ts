@@ -1,13 +1,15 @@
 // docs/ 폴더의 문서를 읽어 글자(텍스트)로 가져온다. [서버 전용]
 // 설계 근거: DESIGN.md 2.2 문서 준비 과정, 6장 오류·예외 처리
-// 현재 범위: .txt·.md 읽기 (PLAN 작업 5)
-// 이후 추가: PDF 읽기(작업 6), 조각 나누기·최대 10개 제한(작업 7)
+// 현재 범위: .txt·.md 읽기(PLAN 작업 5), PDF 읽기(작업 6)
+// 이후 추가: 조각 나누기·최대 10개 제한(작업 7)
 import "server-only";
 
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { DOCS_DIR } from "@/lib/config";
+import { extractText, getDocumentProxy } from "unpdf";
+
+import { DOCS_DIR, SUPPORTED_EXTENSIONS } from "@/lib/config";
 
 /** 글자로 읽어 온 문서 하나 */
 export type SourceDocument = {
@@ -16,9 +18,6 @@ export type SourceDocument = {
   /** 문서 전체 내용 */
   text: string;
 };
-
-/** 글자 그대로 읽을 수 있는 파일 형식 */
-const TEXT_EXTENSIONS = [".txt", ".md"];
 
 /** docs/ 폴더의 절대 경로 */
 function getDocsPath(): string {
@@ -35,12 +34,29 @@ function cleanText(raw: string): string {
   return raw.replace(/^﻿/, "").replace(/\r\n?/g, "\n").trim();
 }
 
+/** .txt·.md 파일을 글자 그대로 읽는다 */
+async function readTextFile(filePath: string): Promise<string> {
+  return readFile(filePath, "utf8");
+}
+
+/** PDF 파일에서 글자를 뽑아낸다 (모든 페이지를 하나로 이어 붙임) */
+async function readPdfFile(filePath: string): Promise<string> {
+  const pdf = await getDocumentProxy(new Uint8Array(await readFile(filePath)));
+  const { text } = await extractText(pdf, { mergePages: true });
+  return text;
+}
+
+/** 확장자에 맞는 방법으로 파일을 읽는다 */
+async function readDocumentFile(filePath: string): Promise<string> {
+  return getExtension(filePath) === ".pdf" ? readPdfFile(filePath) : readTextFile(filePath);
+}
+
 /**
- * docs/ 폴더의 .txt·.md 파일을 파일 이름순으로 읽는다.
- * 읽지 못한 파일과 내용이 빈 파일은 건너뛰고 서버 로그에 이름을 남긴다.
+ * docs/ 폴더의 .txt·.md·.pdf 파일을 파일 이름순으로 읽는다.
+ * 읽지 못한 파일과 내용이 빈 파일(글자 없는 스캔 PDF 등)은 건너뛰고 서버 로그에 이름을 남긴다.
  * docs/ 폴더가 없으면 빈 목록을 돌려준다.
  */
-export async function loadTextDocuments(): Promise<SourceDocument[]> {
+export async function loadDocuments(): Promise<SourceDocument[]> {
   const docsPath = getDocsPath();
 
   let fileNames: string[];
@@ -51,16 +67,16 @@ export async function loadTextDocuments(): Promise<SourceDocument[]> {
     return [];
   }
 
-  const textFileNames = fileNames
-    .filter((name) => TEXT_EXTENSIONS.includes(getExtension(name)))
+  const supportedFileNames = fileNames
+    .filter((name) => SUPPORTED_EXTENSIONS.includes(getExtension(name)))
     .sort((a, b) => a.localeCompare(b, "ko"));
 
   const documents: SourceDocument[] = [];
-  for (const docName of textFileNames) {
+  for (const docName of supportedFileNames) {
     try {
-      const text = cleanText(await readFile(path.join(docsPath, docName), "utf8"));
+      const text = cleanText(await readDocumentFile(path.join(docsPath, docName)));
       if (text.length === 0) {
-        console.warn(`[documents] 내용이 비어 있어 건너뜁니다: ${docName}`);
+        console.warn(`[documents] 읽을 글자가 없어 건너뜁니다: ${docName}`);
         continue;
       }
       documents.push({ docName, text });
