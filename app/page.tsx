@@ -1,10 +1,11 @@
 "use client";
 
 // 챗봇 화면 (주소: /)
-// 설계 근거: DESIGN.md 1장 화면 구성 — ① 머리글, ③ 대화 목록, ⑤ 입력 영역
+// 설계 근거: DESIGN.md 1장 화면 구성 — ① 머리글, ③ 대화 목록, ④ 개인정보 안내, ⑤ 입력 영역
 // 범위: 화면 뼈대(PLAN 작업 11), 서버 API 연결(작업 12) — 질문을 /api/chat으로 보내고 답변과 근거 문서 이름을 보여 준다.
 //       서버 무응답 대비 대기 한도(작업 16)
-// 이후 추가: 개인정보 안내(작업 17), 추천 질문(작업 19), 👍/👎(작업 20)
+//       개인정보 입력 금지 안내(작업 17)
+// 이후 추가: 추천 질문(작업 19), 👍/👎(작업 20)
 // 화면 코드는 서버 전용 파일(lib/search.ts, lib/answer.ts, lib/documents.ts)을 불러오지 않는다.
 
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
@@ -136,8 +137,13 @@ export default function Home() {
         </div>
       </main>
 
-      {/* ⑤ 입력 영역 */}
       <footer className="border-t border-zinc-200 bg-white px-4 py-3">
+        {/* ④ 개인정보 안내 (PRD 7번) — 입력창 바로 위에 항상 보인다 */}
+        <p role="note" className="mx-auto mb-2 max-w-2xl text-xs text-amber-700">
+          ⚠ 이름·연락처·주민등록번호 등 개인정보는 입력하지 마세요.
+        </p>
+
+        {/* ⑤ 입력 영역 */}
         <form onSubmit={handleSubmit} className="mx-auto flex max-w-2xl items-center gap-2">
           <div className="relative flex-1">
             <input
