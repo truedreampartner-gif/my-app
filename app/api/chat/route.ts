@@ -1,8 +1,9 @@
 // 서버 API: 질문을 받아 처리하고 답변을 돌려준다. (POST /api/chat)
 // 설계 근거: DESIGN.md 2.1 처리 과정, 2.3 주고받는 형식
-// 범위: 뼈대(PLAN 작업 10) — 질문 확인 + 관련 조각 찾기까지 하고, 답변 문장은 임시 문구로 돌려준다.
-// 이후 추가: AI 답변 연결(작업 13~15), 요청 전체 10초 제한(작업 16)
+// 범위: 뼈대(PLAN 작업 10), AI 답변 연결(작업 13)
+// 이후 추가: AI 규칙·모호한 질문 안내(작업 14), 실제 참고한 근거만 표시(작업 15), 요청 전체 10초 제한(작업 16)
 
+import { generateAnswer } from "@/lib/answer";
 import {
   ERROR_MESSAGE,
   INVALID_QUESTION_MESSAGE,
@@ -43,13 +44,13 @@ export async function POST(request: Request): Promise<Response> {
       return reply({ status: "not_found", answer: NOT_FOUND_MESSAGE, sources: [] });
     }
 
-    // 4~5. AI 답변은 아직 연결 전이라 임시 문구를 돌려준다 (작업 13에서 교체)
+    // 4. AI에게 묻기
+    const answer = await generateAnswer(question, chunks);
+
+    // 5. 근거: 지금은 AI에게 준 조각의 문서 이름을 중복 없이 모두 표시한다
+    //    (작업 15에서 AI가 실제로 참고한 조각의 문서만 남기도록 바꾼다)
     const sources = [...new Set(chunks.map((chunk) => chunk.docName))];
-    return reply({
-      status: "answered",
-      answer: `(임시 답변) "${question}" 질문과 관련된 문서를 찾았습니다. AI 답변은 아직 연결 전입니다.`,
-      sources,
-    });
+    return reply({ status: "answered", answer, sources });
   } catch (error) {
     // 오류 내용은 서버 로그에만 남기고 화면에는 숨긴다
     console.error("[api/chat] 처리 중 오류", error);
