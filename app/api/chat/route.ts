@@ -1,9 +1,9 @@
 // 서버 API: 질문을 받아 처리하고 답변을 돌려준다. (POST /api/chat)
 // 설계 근거: DESIGN.md 2.1 처리 과정, 2.3 주고받는 형식
-// 범위: 뼈대(PLAN 작업 10), AI 답변 연결(작업 13)
-// 이후 추가: AI 규칙·모호한 질문 안내(작업 14), 실제 참고한 근거만 표시(작업 15), 요청 전체 10초 제한(작업 16)
+// 범위: 뼈대(PLAN 작업 10), AI 답변 연결(작업 13), AI 규칙·모호한 질문 안내(작업 14)
+// 이후 추가: 실제 참고한 근거만 표시(작업 15), 요청 전체 10초 제한(작업 16)
 
-import { generateAnswer } from "@/lib/answer";
+import { generateAnswer, withAmbiguousSuffix } from "@/lib/answer";
 import {
   ERROR_MESSAGE,
   INVALID_QUESTION_MESSAGE,
@@ -44,13 +44,18 @@ export async function POST(request: Request): Promise<Response> {
       return reply({ status: "not_found", answer: NOT_FOUND_MESSAGE, sources: [] });
     }
 
-    // 4. AI에게 묻기
-    const answer = await generateAnswer(question, chunks);
+    // 4. AI에게 묻기 (응답 모양이 틀리면 오류 → 아래 catch에서 "잠시 후 다시 시도해 주세요.")
+    const result = await generateAnswer(question, chunks);
 
-    // 5. 근거: 지금은 AI에게 준 조각의 문서 이름을 중복 없이 모두 표시한다
-    //    (작업 15에서 AI가 실제로 참고한 조각의 문서만 남기도록 바꾼다)
+    // 5. 답변 검사: AI가 못 찾았거나 범위 밖이라고 판단하면 고정 문구
+    if (!result.found || result.answer.length === 0) {
+      return reply({ status: "not_found", answer: NOT_FOUND_MESSAGE, sources: [] });
+    }
+
+    // 근거: 지금은 AI에게 준 조각의 문서 이름을 중복 없이 모두 표시한다
+    // (작업 15에서 AI가 실제로 참고한 조각의 문서만 남기도록 바꾼다)
     const sources = [...new Set(chunks.map((chunk) => chunk.docName))];
-    return reply({ status: "answered", answer, sources });
+    return reply({ status: "answered", answer: withAmbiguousSuffix(result), sources });
   } catch (error) {
     // 오류 내용은 서버 로그에만 남기고 화면에는 숨긴다
     console.error("[api/chat] 처리 중 오류", error);
