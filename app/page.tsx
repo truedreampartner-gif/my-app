@@ -1,16 +1,17 @@
 "use client";
 
 // 챗봇 화면 (주소: /)
-// 설계 근거: DESIGN.md 1장 화면 구성 — ① 머리글, ③ 대화 목록, ④ 개인정보 안내, ⑤ 입력 영역
+// 설계 근거: DESIGN.md 1장 화면 구성 — ① 머리글, ② 추천 질문, ③ 대화 목록, ④ 개인정보 안내, ⑤ 입력 영역
 // 범위: 화면 뼈대(PLAN 작업 11), 서버 API 연결(작업 12) — 질문을 /api/chat으로 보내고 답변과 근거 문서 이름을 보여 준다.
 //       서버 무응답 대비 대기 한도(작업 16)
-//       개인정보 입력 금지 안내(작업 17)
-// 이후 추가: 추천 질문(작업 19), 👍/👎(작업 20)
+//       개인정보 입력 금지 안내(작업 17), 추천 질문 버튼(작업 19, nice)
+// 이후 추가: 👍/👎(작업 20)
 // 화면 코드는 서버 전용 파일(lib/search.ts, lib/answer.ts, lib/documents.ts)을 불러오지 않는다.
 
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
 
 import { ERROR_MESSAGE, MAX_QUESTION_LENGTH, REQUEST_TIMEOUT_MS } from "@/lib/config";
+import { SUGGESTED_QUESTIONS } from "@/lib/suggestions";
 
 /** 서버가 아예 응답하지 않을 때를 대비한 화면 쪽 대기 한도 (서버의 10초 제한 + 여유 5초) */
 const CLIENT_TIMEOUT_MS = REQUEST_TIMEOUT_MS + 5_000;
@@ -98,10 +99,24 @@ export default function Home() {
       {/* ③ 대화 목록 */}
       <main className="flex-1 overflow-y-auto px-4 py-6">
         <div className="mx-auto flex max-w-2xl flex-col gap-3">
+          {/* ② 추천 질문 (nice) — 대화가 비어 있을 때만. 누르면 바로 전송되고, 첫 질문을 보내면 사라진다 */}
           {messages.length === 0 && (
-            <p className="mt-16 text-center text-sm text-zinc-400">
-              궁금한 내용을 아래 입력창에 적어 보세요.
-            </p>
+            <div className="mt-12 flex flex-col items-center gap-4">
+              <p className="text-sm text-zinc-400">궁금한 내용을 아래 입력창에 적거나, 추천 질문을 눌러 보세요.</p>
+              <div className="flex flex-wrap justify-center gap-2">
+                {SUGGESTED_QUESTIONS.map((question) => (
+                  <button
+                    key={question}
+                    type="button"
+                    onClick={() => void sendQuestion(question)}
+                    disabled={isWaiting}
+                    className="rounded-full border border-blue-200 bg-white px-4 py-2 text-sm text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {question}
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
 
           {messages.map((message) => (
