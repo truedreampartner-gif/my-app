@@ -4,18 +4,20 @@
 // 설계 근거: DESIGN.md 1장 화면 구성 — ① 머리글, ② 추천 질문, ③ 대화 목록, ④ 개인정보 안내, ⑤ 입력 영역
 // 범위: 화면 뼈대(PLAN 작업 11), 서버 API 연결(작업 12) — 질문을 /api/chat으로 보내고 답변과 근거 문서 이름을 보여 준다.
 //       서버 무응답 대비 대기 한도(작업 16)
-//       개인정보 입력 금지 안내(작업 17), 추천 질문 버튼(작업 19, nice)
-// 이후 추가: 👍/👎(작업 20)
+//       개인정보 입력 금지 안내(작업 17), 추천 질문 버튼(작업 19, nice), 답변 평가 👍/👎(작업 20, nice)
 // 화면 코드는 서버 전용 파일(lib/search.ts, lib/answer.ts, lib/documents.ts)을 불러오지 않는다.
 
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
 
 import { ERROR_MESSAGE, MAX_QUESTION_LENGTH, REQUEST_TIMEOUT_MS } from "@/lib/config";
 import { SUGGESTED_QUESTIONS } from "@/lib/suggestions";
+import type { ChatRequest, ChatResponse, ChatStatus } from "@/lib/types";
 
 /** 서버가 아예 응답하지 않을 때를 대비한 화면 쪽 대기 한도 (서버의 10초 제한 + 여유 5초) */
 const CLIENT_TIMEOUT_MS = REQUEST_TIMEOUT_MS + 5_000;
-import type { ChatRequest, ChatResponse } from "@/lib/types";
+
+/** 답변 평가: up = 👍, down = 👎, null = 아직 안 누름 */
+type Rating = "up" | "down" | null;
 
 /** 대화 목록의 말풍선 하나 */
 type Message = {
@@ -25,6 +27,10 @@ type Message = {
   text: string;
   /** 챗봇 답변의 근거 문서 이름 (없으면 빈 목록) */
   sources: string[];
+  /** 챗봇 답변의 종류 (내 질문이면 없음) */
+  status?: ChatStatus;
+  /** 답변 평가 (nice) — 화면에만 표시하고 저장하지 않는다 */
+  rating: Rating;
 };
 
 /**
@@ -62,18 +68,25 @@ export default function Home() {
     listEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isWaiting]);
 
-  function addMessage(role: Message["role"], text: string, sources: string[] = []) {
-    setMessages((prev) => [...prev, { id: nextId.current++, role, text, sources }]);
+  function addMessage(message: Omit<Message, "id" | "rating">) {
+    setMessages((prev) => [...prev, { ...message, id: nextId.current++, rating: null }]);
   }
 
   async function sendQuestion(question: string) {
-    addMessage("user", question);
+    addMessage({ role: "user", text: question, sources: [] });
     setInput("");
     setIsWaiting(true);
 
     const reply = await askServer(question);
-    addMessage("bot", reply.answer, reply.sources);
+    addMessage({ role: "bot", text: reply.answer, sources: reply.sources, status: reply.status });
     setIsWaiting(false);
+  }
+
+  // 같은 버튼을 다시 누르면 선택을 취소한다. 결과는 화면에만 남고 새로고침하면 사라진다.
+  function rateMessage(id: number, rating: Exclude<Rating, null>) {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, rating: m.rating === rating ? null : rating } : m)),
+    );
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -136,6 +149,32 @@ export default function Home() {
                   <p className="mt-2 border-t border-zinc-100 pt-2 text-xs text-zinc-500">
                     📄 근거: {message.sources.join(", ")}
                   </p>
+                )}
+                {/* 👍/👎 (nice) — 오류 답변에는 달지 않는다 */}
+                {message.role === "bot" && message.status !== "error" && (
+                  <div className="mt-2 flex gap-1" aria-label="답변 평가">
+                    {(
+                      [
+                        ["up", "👍", "도움이 됐어요"],
+                        ["down", "👎", "도움이 안 됐어요"],
+                      ] as const
+                    ).map(([value, emoji, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => rateMessage(message.id, value)}
+                        aria-label={label}
+                        aria-pressed={message.rating === value}
+                        className={
+                          message.rating === value
+                            ? "rounded-full border border-blue-500 bg-blue-100 px-2 py-0.5 text-sm"
+                            : "rounded-full border border-zinc-200 px-2 py-0.5 text-sm opacity-60 hover:opacity-100"
+                        }
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
                 )}
               </div>
             </div>
