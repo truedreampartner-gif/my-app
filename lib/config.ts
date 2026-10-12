@@ -46,6 +46,21 @@ export const EMBEDDING_MODEL = "text-embedding-3-small";
 /** 요청 전체 제한 시간 (밀리초). 문서 준비·뜻 좌표 계산·AI 답변을 모두 포함한다. */
 export const REQUEST_TIMEOUT_MS = 10_000;
 
+/**
+ * OpenAI 호출 한 번을 기다리는 시간 (밀리초). 이 시간 안에 답이 없으면 그 시도를 끊고 한 번 더 시도한다.
+ * 다시 시도해도 요청 전체 10초(REQUEST_TIMEOUT_MS)는 넘지 않는다.
+ * 평소 응답: 질문 뜻 좌표 0.2초 안팎, AI 답변 1.5~3초 (작업 18·21 측정)
+ */
+export const EMBEDDING_ATTEMPT_TIMEOUT_MS = 3_000;
+export const ANSWER_ATTEMPT_TIMEOUT_MS = 6_000;
+
+/** 느리거나 일시적으로 실패한 OpenAI 호출을 다시 시도하는 횟수 */
+export const OPENAI_MAX_RETRIES = 1;
+
+/** 같은 접속 주소(IP)에서 받는 질문 수 제한: RATE_LIMIT_WINDOW_MS 동안 최대 RATE_LIMIT_MAX_REQUESTS번 */
+export const RATE_LIMIT_MAX_REQUESTS = 10;
+export const RATE_LIMIT_WINDOW_MS = 60_000;
+
 /** 질문 최대 길이 (글자 수) */
 export const MAX_QUESTION_LENGTH = 500;
 
@@ -65,6 +80,9 @@ export const ERROR_MESSAGE = "잠시 후 다시 시도해 주세요.";
 
 /** 질문이 짧거나 모호할 때 답변 끝에 붙이는 안내 */
 export const AMBIGUOUS_SUFFIX = "더 구체적으로 물어보시면 정확해져요.";
+
+/** 같은 접속 주소에서 질문을 너무 많이 보냈을 때 (429 응답) */
+export const RATE_LIMITED_MESSAGE = "질문이 너무 많아요. 1분 정도 지난 뒤 다시 시도해 주세요.";
 
 /** 질문이 비었거나 너무 길 때 (400 응답) */
 export const INVALID_QUESTION_MESSAGE = `질문은 1자 이상 ${MAX_QUESTION_LENGTH}자 이하로 입력해 주세요.`;

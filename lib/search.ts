@@ -5,7 +5,13 @@ import "server-only";
 
 import OpenAI from "openai";
 
-import { EMBEDDING_MODEL, MAX_SOURCES, RELEVANCE_THRESHOLD } from "@/lib/config";
+import {
+  EMBEDDING_ATTEMPT_TIMEOUT_MS,
+  EMBEDDING_MODEL,
+  MAX_SOURCES,
+  OPENAI_MAX_RETRIES,
+  RELEVANCE_THRESHOLD,
+} from "@/lib/config";
 import { loadDocumentChunks } from "@/lib/documents";
 import type { DocumentChunk } from "@/lib/types";
 
@@ -29,14 +35,18 @@ export function getOpenAIClient(): OpenAI {
 
 /**
  * 글 여러 개의 뜻 좌표(임베딩)를 한 번에 계산한다. 결과 순서는 입력 순서와 같다.
- * signal이 중단되면(10초 초과) OpenAI 호출도 함께 멈춘다.
+ * signal을 넘기면(질문 하나 처리용) 한 번 시도에 EMBEDDING_ATTEMPT_TIMEOUT_MS까지만 기다리고
+ * 느리면 한 번 더 시도한다. signal이 중단되면(요청 전체 10초 초과) 다시 시도도 멈춘다.
+ * signal 없이 부르면(공용 문서 준비용) 시간 제한 없이 기본 설정으로 계산한다.
  */
 export async function embedTexts(texts: string[], signal?: AbortSignal): Promise<number[][]> {
   if (texts.length === 0) return [];
 
   const response = await getOpenAIClient().embeddings.create(
     { model: EMBEDDING_MODEL, input: texts },
-    { signal },
+    signal
+      ? { signal, timeout: EMBEDDING_ATTEMPT_TIMEOUT_MS, maxRetries: OPENAI_MAX_RETRIES }
+      : undefined,
   );
 
   return response.data

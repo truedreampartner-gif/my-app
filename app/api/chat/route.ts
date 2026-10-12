@@ -1,7 +1,9 @@
 // 서버 API: 질문을 받아 처리하고 답변을 돌려준다. (POST /api/chat)
 // 설계 근거: DESIGN.md 2.1 처리 과정, 2.3 주고받는 형식, 6장 오류·예외 처리
 // 범위: 뼈대(PLAN 작업 10), AI 답변 연결(작업 13), AI 규칙·모호한 질문 안내(작업 14),
-//       실제 참고한 근거만 표시(작업 15), 요청 전체 10초 제한(작업 16)
+//       실제 참고한 근거만 표시(작업 15), 요청 전체 10초 제한(작업 16),
+//       Gap 보완: 로그에서 질문 원문 제외, 접속 주소별 질문 수 제한
+// 로그 원칙: 사용자 질문 원문은 개인정보가 섞일 수 있으므로 서버 로그에 남기지 않는다 (PRD 7번). 길이만 남긴다.
 
 import { APIError } from "openai";
 
@@ -11,8 +13,10 @@ import {
   INVALID_QUESTION_MESSAGE,
   MAX_QUESTION_LENGTH,
   NOT_FOUND_MESSAGE,
+  RATE_LIMITED_MESSAGE,
   REQUEST_TIMEOUT_MS,
 } from "@/lib/config";
+import { allowRequest, getClientKey } from "@/lib/rate-limit";
 import { findRelevantChunks } from "@/lib/search";
 import type { ChatResponse } from "@/lib/types";
 
@@ -51,7 +55,7 @@ async function answerQuestion(question: string, signal: AbortSignal): Promise<Ch
   // 근거: AI가 실제로 참고한 조각의 문서 이름만 남긴다. 하나도 안 남으면 근거 없는 답이라 보여 주지 않는다
   const sources = pickSources(result, chunks);
   if (sources.length === 0) {
-    console.warn(`[api/chat] 근거로 확인된 문서가 없어 답변을 보여 주지 않습니다 / 질문: ${question}`);
+    console.warn(`[api/chat] 근거로 확인된 문서가 없어 답변을 보여 주지 않습니다 (질문 ${question.length}자)`);
     return NOT_FOUND;
   }
 
@@ -84,6 +88,12 @@ export async function POST(request: Request): Promise<Response> {
     return reply({ status: "error", answer: INVALID_QUESTION_MESSAGE, sources: [] }, 400);
   }
 
+  // 질문 수 제한: 같은 접속 주소에서 1분에 10번을 넘으면 OpenAI를 부르지 않고 429로 거절
+  if (!allowRequest(getClientKey(request))) {
+    console.warn("[api/chat] 같은 접속 주소의 질문이 너무 많아 거절했습니다");
+    return reply({ status: "error", answer: RATE_LIMITED_MESSAGE, sources: [] }, 429);
+  }
+
   // 2~5단계 전체에 10초 제한 (문서 준비·뜻 좌표 계산·AI 답변 모두 포함)
   const signal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
   const startedAt = Date.now();
@@ -92,10 +102,10 @@ export async function POST(request: Request): Promise<Response> {
   } catch (error) {
     // 오류 내용은 서버 로그에만 남기고 화면에는 숨긴다
     if (signal.aborted) {
-      console.error(`[api/chat] ${REQUEST_TIMEOUT_MS / 1000}초를 넘겨 중단했습니다 / 질문: ${question}`);
+      console.error(`[api/chat] ${REQUEST_TIMEOUT_MS / 1000}초를 넘겨 중단했습니다 (질문 ${question.length}자)`);
     } else {
       console.error(
-        `[api/chat] 처리 중 오류 (${Date.now() - startedAt}ms) / 질문: ${question} / ${describeError(error)}`,
+        `[api/chat] 처리 중 오류 (${Date.now() - startedAt}ms, 질문 ${question.length}자) / ${describeError(error)}`,
       );
     }
     return reply(FAILED);
