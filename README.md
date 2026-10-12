@@ -1,36 +1,112 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 모두의 교육 비서관
 
-## Getting Started
+사내 문서를 읽고 직원의 질문에 답해 주는 챗봇입니다. 신규 직원과 관련 부서 직원이 규정·절차·양식 안내를 빠르게 찾을 수 있게 하고, 담당자에게 몰리는 반복 질문을 줄이는 것이 목표입니다.
 
-First, run the development server:
+- **배포 주소**: https://my-app-lyart-seven.vercel.app
+- **기획·설계 문서**: [PRD.md](PRD.md) (기획서) · [PLAN.md](PLAN.md) (개발 계획) · [DESIGN.md](DESIGN.md) (설계서) · [CHECK.md](CHECK.md) (점검 결과)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+> `docs/` 폴더의 문서는 실습용으로 만든 **가상의 예시 문서**입니다. 실제 회사의 규정이 아닙니다.
+
+## 주요 기능
+
+| 구분 | 기능 | 설명 |
+|---|---|---|
+| 핵심 | 문서 기반 질의응답 | 질문과 뜻이 가까운 문서 조각을 찾아, 그 내용으로만 답합니다. 문서에 없으면 지어내지 않고 "문서에서 찾을 수 없습니다. 담당자에게 문의해 주세요."라고 답합니다. |
+| 핵심 | 근거 문서 표시 | 답변 아래에 실제로 참고한 문서 이름을 1~3개 보여 줍니다. |
+| 추가 | 추천 질문 버튼 | 첫 화면에 자주 묻는 질문 3개를 버튼으로 보여 줍니다. |
+| 추가 | 답변 평가 | 답변마다 👍/👎 버튼이 있습니다. 결과는 화면에만 표시하고 저장하지 않습니다. |
+
+**답변 규칙**: 5문장·300자 이내, 짧거나 모호한 질문에는 "더 구체적으로 물어보시면 정확해져요." 안내, 10초를 넘기거나 오류가 나면 "잠시 후 다시 시도해 주세요."
+
+## 동작 방식
+
+```
+질문 입력 → 서버(/api/chat)
+  → docs/ 문서를 약 500자 조각으로 나눔 (처음 한 번만, 이후 메모리에 보관)
+  → 질문과 뜻이 가까운 조각 최대 3개 선택 (OpenAI 임베딩)
+  → 그 조각과 질문을 OpenAI에 보내 답변 생성
+  → AI가 실제로 참고한 조각의 문서 이름만 근거로 표시
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 기술 스택
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- **Next.js 16** (App Router): 화면과 서버 API를 한 프로젝트에서 처리
+- **React 19 · TypeScript · Tailwind CSS 4**
+- **OpenAI**: 답변 생성(`gpt-5.4-mini`), 뜻 좌표 계산(`text-embedding-3-small`)
+- **unpdf**: PDF 문서에서 글자 추출
+- **Vercel**: 배포 (방화벽 요청 제한 규칙 사용)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+데이터베이스, 로그인, 대화 기록 저장은 사용하지 않습니다.
 
-## Learn More
+## 폴더 구조
 
-To learn more about Next.js, take a look at the following resources:
+```
+app/
+  page.tsx              챗봇 화면
+  api/chat/route.ts     질문을 받아 답을 돌려주는 서버 API
+lib/
+  documents.ts          docs/ 문서 읽기(.txt·.md·.pdf)와 조각 나누기
+  search.ts             OpenAI 연결, 관련 조각 찾기
+  answer.ts             AI 지시문, 답변 받기, 근거 확인
+  rate-limit.ts         같은 접속 주소의 질문 수 제한
+  config.ts             숫자 설정값과 고정 문구
+docs/                   챗봇이 읽는 문서 (최대 10개)
+tests/test-questions.md 테스트 질문 10개와 모범 답안, 점검 기록
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 내 컴퓨터에서 실행하기
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. Node.js를 설치합니다.
+2. 이 저장소를 내려받고 폴더에서 필요한 부품을 설치합니다.
 
-## Deploy on Vercel
+   ```bash
+   npm install
+   ```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+3. 폴더 맨 위에 `.env` 파일을 만들고 OpenAI API 키를 한 줄 적습니다. 이 파일은 `.gitignore`에 등록돼 있어 GitHub에 올라가지 않습니다.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+   ```
+   OPENAI_API_KEY=여기에_본인_키
+   ```
+
+4. 개발 서버를 켜고, 화면에 나온 주소(보통 http://localhost:3000)를 엽니다.
+
+   ```bash
+   npm run dev
+   ```
+
+## 문서 바꾸기
+
+1. `docs/` 폴더에 `.txt`, `.md`, `.pdf` 파일을 넣습니다 (최대 10개, 넘으면 파일 이름순 앞 10개만 사용).
+2. **공개해도 되는 문서만** 넣고, 이름·연락처·주민등록번호 같은 개인정보는 지운 뒤 넣습니다.
+3. 서버를 다시 켜거나 다시 배포해야 반영됩니다.
+4. `tests/test-questions.md`의 질문과 모범 답안을 새 문서에 맞게 고치고 다시 점검합니다.
+
+## 배포 (Vercel)
+
+1. Vercel 프로젝트의 환경 변수에 `OPENAI_API_KEY`를 등록합니다. 앱이 쓰는 키는 이것 하나뿐입니다.
+2. Vercel CLI로 배포합니다.
+
+   ```bash
+   npx vercel deploy --prod
+   ```
+
+- `.vercelignore`로 `.env` 등 비밀 파일이 업로드되지 않게 막아 두었습니다.
+- PowerShell에서 키를 파이프(`|`)로 넘겨 등록하면 값 앞에 보이지 않는 문자가 붙어 오류가 납니다. Vercel 화면이나 API로 등록하세요.
+
+## 보안과 개인정보
+
+- API 키는 서버 코드에서만 사용하며 브라우저로 내려가지 않습니다.
+- 대화 기록을 저장하지 않고, 서버 로그에도 질문 내용은 남기지 않습니다(글자 수만 기록).
+- 질문 안에 "규칙을 무시해" 같은 지시를 넣어도 따르지 않도록 막아 두었습니다.
+- 같은 접속 주소에서 1분에 10번을 넘게 질문하면 잠시 막힙니다.
+- 로그인이 없으므로 **공개해도 되는 문서만** 사용하세요.
+- 남은 점검 항목은 [CHECK.md](CHECK.md)에 정리돼 있습니다.
+
+## 명령어
+
+| 명령 | 하는 일 |
+|---|---|
+| `npm run dev` | 개발 서버 실행 |
+| `npm run build` | 배포용 빌드 |
+| `npm run lint` | 코드 검사 |
